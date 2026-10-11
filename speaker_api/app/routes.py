@@ -11,6 +11,8 @@ from app.schemas import (
     ComparisonResponse,
     SpeakerCandidate,
     IdentificationResponse,
+    BuildFromEmbeddingsRequest,
+    PrototypeResponse,
     AyahSearchRequest,
     AyahSearchResponse,
     TranscriptionResponse,
@@ -122,6 +124,35 @@ async def compare_embeddings(
     return {"scores": scores, "sorted_indices": sorted_indices}
 
 
+@router.post("/voiceprints/build-from-embeddings", response_model=PrototypeResponse)
+async def build_prototype_from_embeddings(
+    req: BuildFromEmbeddingsRequest,
+    matcher: SpeakerMatcher = Depends(get_matcher),
+):
+    """Rebuild a voiceprint prototype from already-extracted embeddings.
+
+    Used when adding/removing a reference so the prototype is recomputed with
+    the same strategy as /voiceprints/build (normalized mean), without needing
+    the original audio files.
+    """
+    dimensions = {len(emb) for emb in req.embeddings}
+    if len(dimensions) != 1:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Inconsistent embedding dimensions: {sorted(dimensions)}",
+        )
+
+    prototype, references = matcher.build_voiceprint(req.embeddings)
+    return {
+        "prototype_embedding": prototype,
+        "reference_embeddings": references,
+        "embeddings_count": len(references),
+        "embedding_dimension": len(prototype),
+        "model_id": settings.MODEL_ID,
+        "model_version": settings.MODEL_VERSION,
+    }
+
+
 @router.post("/speakers/identify", response_model=IdentificationResponse)
 async def identify_speaker(
     file: UploadFile = File(...),
@@ -160,7 +191,10 @@ async def transcribe_audio(
     language: Optional[str] = Form(None),
     prompt: Optional[str] = Form(None),
 ):
-    convertible = {"flac", "mp3", "mp4", "mpeg", "mpga", "m4a", "ogg", "wav", "webm"}
+    import os
+    import tempfile
+
+    convertible = {"flac", "mp3", "mp4", "mpeg", "mpga", "m4a", "ogg", "wav", "webm", "opus"}
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Empty audio file")
@@ -172,10 +206,15 @@ async def transcribe_audio(
             detail=f"Unsupported audio format '{extension}'. Supported: {sorted(convertible)}",
         )
 
+    temp_in = None
     try:
-        result = transcription_service.transcribe(
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{extension or 'wav'}") as handle:
+            handle.write(content)
+            temp_in = handle.name
+
+        result = transcription_service.transcribe_file(
+            path=temp_in,
             filename=file.filename or "audio.wav",
-            content=content,
             language=language,
             prompt=prompt,
         )
@@ -183,6 +222,9 @@ async def transcribe_audio(
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Transcription failed: {e}")
+    finally:
+        if temp_in and os.path.exists(temp_in):
+            os.remove(temp_in)
 
     return {
         "text": result.get("text", ""),

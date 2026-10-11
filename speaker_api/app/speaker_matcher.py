@@ -22,21 +22,38 @@ class SpeakerMatcher:
         """
         Compares target embedding against a list of candidates.
         Returns top 3 and the identification decision.
+
+        Candidates whose embeddings are incompatible with the target (different
+        model, model version, or dimension) are skipped and reported in the
+        decision reason, since embeddings from different models/versions are not
+        comparable.
         """
         threshold = custom_threshold or settings.DEFAULT_SIMILARITY_THRESHOLD
+        target_dim = len(target_emb)
         results = []
+        skipped = 0
 
         for candidate in candidates:
+            # Skip candidates produced by a different model/version
+            if candidate.model_id and candidate.model_id != settings.MODEL_ID:
+                skipped += 1
+                continue
+            if candidate.model_version and candidate.model_version != settings.MODEL_VERSION:
+                skipped += 1
+                continue
+
             # Strategy: Compare against prototype AND all reference embeddings
             scores = []
-            if candidate.prototype_embedding:
+            if candidate.prototype_embedding and len(candidate.prototype_embedding) == target_dim:
                 scores.append(self.compare_embeddings(target_emb, candidate.prototype_embedding))
 
             if candidate.reference_embeddings:
                 for ref in candidate.reference_embeddings:
-                    scores.append(self.compare_embeddings(target_emb, ref))
+                    if len(ref) == target_dim:
+                        scores.append(self.compare_embeddings(target_emb, ref))
 
             if not scores:
+                skipped += 1
                 continue
 
             # Use the maximum similarity found for this person (Max-Pooling Strategy)
@@ -57,6 +74,8 @@ class SpeakerMatcher:
 
         identified = False
         decision_reason = "Insufficient similarity score"
+        if skipped:
+            decision_reason += f" ({skipped} incompatible candidate(s) ignored)"
 
         if top1["score"] >= threshold:
             identified = True

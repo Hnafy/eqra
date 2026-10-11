@@ -37,11 +37,19 @@ class SpeakerCandidate(BaseModel):
     speaker_name: str
     prototype_embedding: List[float]
     reference_embeddings: Optional[List[List[float]]] = []
+    model_id: Optional[str] = None
+    model_version: Optional[str] = None
 
 
 class IdentifyRequest(BaseModel):
     speakers: List[SpeakerCandidate]
     threshold: Optional[float] = None
+
+
+class SpeakerScore(BaseModel):
+    speaker_id: str
+    speaker_name: str
+    score: float
 
 
 class IdentificationResponse(BaseModel):
@@ -51,8 +59,21 @@ class IdentificationResponse(BaseModel):
     top1_score: float
     top2_score: float
     score_margin: float
-    candidates: List[Dict[str, Any]]
+    candidates: List[SpeakerScore]
     decision_reason: str
+
+
+class BuildFromEmbeddingsRequest(BaseModel):
+    embeddings: List[List[float]] = Field(..., min_length=1)
+
+
+class PrototypeResponse(BaseModel):
+    prototype_embedding: List[float]
+    reference_embeddings: List[List[float]]
+    embeddings_count: int
+    embedding_dimension: int
+    model_id: str
+    model_version: str
 
 
 class AyahSearchRequest(BaseModel):
@@ -62,7 +83,12 @@ class AyahSearchRequest(BaseModel):
 
 class AyahResult(BaseModel):
     surah: str
+    surah_number: Optional[int] = None
     number: int
+    end_surah: Optional[str] = None
+    end_surah_number: Optional[int] = None
+    end_number: Optional[int] = None
+    verse_count: Optional[int] = 1
     text: str
     score: float
 

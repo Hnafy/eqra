@@ -41,10 +41,17 @@ class EmbeddingExtractor:
         if self.model is None:
             raise RuntimeError("Model not loaded")
 
+        # SpeechBrain's load_audio() runs the path through split_path()/fetch(),
+        # which only understands "/" separators. On Windows an absolute path
+        # such as "C:\\Users\\..." is otherwise treated as a filename in the
+        # current working directory and fails to load. Normalize to forward
+        # slashes before handing it to SpeechBrain.
+        normalized_path = str(audio_path).replace("\\", "/")
+
         # SpeechBrain loads and normalizes the waveform to the model's expected
         # sample rate (16 kHz). In SpeechBrain >= 1.1 this returns a single
         # tensor [time].
-        signal = self.model.load_audio(audio_path)
+        signal = self.model.load_audio(normalized_path)
 
         with torch.no_grad():
             embeddings = self.model.encode_batch(signal)

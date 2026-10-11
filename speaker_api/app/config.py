@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     GROQ_WHISPER_MODEL: str = os.getenv("GROQ_WHISPER_MODEL", "whisper-large-v3-turbo")
     DEFAULT_LANGUAGE: str = os.getenv("DEFAULT_LANGUAGE", "ar")
+    # Audio longer than this is split into chunks before transcription to stay
+    # within Groq's per-request limits.
+    TRANSCRIBE_CHUNK_SECONDS: int = int(os.getenv("TRANSCRIBE_CHUNK_SECONDS", 60))
+    TRANSCRIBE_MAX_MB: int = int(os.getenv("TRANSCRIBE_MAX_MB", 24))
 
     # YouTube Data API
     YOUTUBE_API_KEY: str = os.getenv("API_KEY", os.getenv("YOUTUBE_API_KEY", ""))
@@ -40,6 +44,8 @@ class Settings(BaseSettings):
     QURAN_JSON_PATH: str = os.getenv(
         "QURAN_JSON_PATH", os.path.join(_APP_ROOT, "data", "quran.json")
     )
+    # Quran search: maximum number of consecutive ayahs a single match may span.
+    QURAN_MAX_WINDOW: int = int(os.getenv("QURAN_MAX_WINDOW", "8"))
 
 
 settings = Settings()
